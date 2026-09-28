@@ -100,12 +100,8 @@ Expected result:
 | `*_roundtrip`   | PASS                   | PASS    |
 
 The deadlock depends on thread scheduling, so a single run on upstream can pass by chance.
-The tests use rayon's global pool (one worker per core). They were run on a 32-core machine.
-
-bug3 hangs reliably only with more rayon workers than cores. On a 32-core machine it
-passed with 8, 16 and 32 workers and hung with 64 and 128. So `run-tests.sh` runs the
-bug3 concurrent test with `RAYON_NUM_THREADS` set to twice the core count, in both modes.
-An explicit `RAYON_NUM_THREADS` always wins.
+The tests use rayon's global pool. bug4 and bug5 use one worker per core.
+bug3 uses twice as many workers as cores (see below).
 
 Bug5's lock window is shorter than bug3/bug4: the lock covers only a parallel copy.
 That test uses larger defaults.
@@ -118,13 +114,65 @@ That test uses larger defaults.
 | `REPRO_WIDTH`      | 32                  | 32           |
 | `REPRO_STALL_SECS` | 60                  | 120          |
 
+## Measured results
+
+On a 32-core Linux machine with Rust 1.95.0, 5 runs of each mode:
+
+| Test                                           | `upstream` | `fixed`  |
+|------------------------------------------------|------------|----------|
+| `bug3_hiding_mmcs_concurrent_commit`           | 5/5 hang   | 0/5 hang |
+| `bug4_hiding_pcs_concurrent_get_quotient_ldes` | 5/5 hang   | 0/5 hang |
+| `bug5_hiding_pcs_concurrent_commit`            | 4/5 hang   | 0/5 hang |
+| `bug3_hiding_mmcs_roundtrip`                   | 5/5 pass   | 5/5 pass |
+| `bug5_hiding_pcs_roundtrip`                    | 5/5 pass   | 5/5 pass |
+
+bug3 with different worker counts on the same machine (`upstream`, one run each):
+
+| `RAYON_NUM_THREADS` | Result |
+|---------------------|--------|
+| 8                   | pass   |
+| 16                  | pass   |
+| 32                  | hang in some runs, pass in others |
+| 64                  | hang   |
+| 128                 | hang   |
+
+So `run-tests.sh` runs the bug3 concurrent test with `RAYON_NUM_THREADS` set to twice
+the core count, in both modes. An explicit `RAYON_NUM_THREADS` always wins.
+
+These results come from one machine only. On another machine, the hang rate can differ.
+
+## Other machines
+
+If a concurrent test passes on `upstream`, it does not mean the bug is absent.
+Try more workers and more rounds:
+
+```bash
+RAYON_NUM_THREADS=64 REPRO_ROUNDS=50 ./run-tests.sh upstream bug3_hiding_mmcs_concurrent_commit
+```
+
+To find the worker count that hangs on your machine:
+
+```bash
+for n in 8 16 32 64 128; do echo "== RAYON_NUM_THREADS=$n"; RAYON_NUM_THREADS=$n ./run-tests.sh upstream bug3_hiding_mmcs_concurrent_commit 2>&1 | grep -E "workers=|OK:|DEADLOCK"; done
+```
+
+To count hangs over several runs:
+
+```bash
+touch logs/.start; for i in 1 2 3 4 5; do ./run-tests.sh upstream > /dev/null 2>&1; done; grep -h "^PASS\|^FAIL" $(find logs -name 'upstream-*.log' -newer logs/.start) | sort | uniq -c
+```
+
+Use the same settings for `fixed`, so that the comparison is fair.
+
+Building Plonky3 needs a lot of memory. On small machines the build can fail.
+
 ## How to run
 
 **Requirements:** `git`, a recent Rust toolchain, and a machine with many cores.
 Plonky3 `main` does not build on Rust 1.91. The tests were run with Rust 1.95.
 Check with `rustc --version`.
 
-### Step 1 — clone this repository
+### Step 1: clone this repository
 
 ```bash
 git clone <url>
@@ -133,7 +181,7 @@ cd plonky3-hiding-rng-lock-repro
 
 Or unzip the archive and enter the directory.
 
-### Step 2 — reproduce the bugs on upstream Plonky3
+### Step 2: reproduce the bugs on upstream Plonky3
 
 This downloads Plonky3 `main` from GitHub (pinned at `299d81c2`) and runs the tests.
 The three concurrent tests will deadlock and fail. The two roundtrip tests will pass.
@@ -146,16 +194,16 @@ Expected summary:
 
 ```
 PASS  bug3_hiding_mmcs_roundtrip
-FAIL  bug3_hiding_mmcs_concurrent_commit        ← deadlock confirmed
-FAIL  bug4_hiding_pcs_concurrent_get_quotient_ldes  ← deadlock confirmed
+FAIL  bug3_hiding_mmcs_concurrent_commit
+FAIL  bug4_hiding_pcs_concurrent_get_quotient_ldes
 PASS  bug5_hiding_pcs_roundtrip
-FAIL  bug5_hiding_pcs_concurrent_commit         ← deadlock confirmed
+FAIL  bug5_hiding_pcs_concurrent_commit
 ```
 
 The deadlock tests take several minutes each. The watchdog turns a hang into a test
 failure after the stall timeout, then the next test starts.
 
-### Step 3 — create the fixed copy
+### Step 3: create the fixed copy
 
 This clones the same Plonky3 commit into `vendor/plonky3-fixed/` and applies
 `patches/0001-hiding-rng-lock.patch`. It does not modify the upstream repo.
@@ -164,7 +212,7 @@ This clones the same Plonky3 commit into `vendor/plonky3-fixed/` and applies
 ./setup-fixed.sh
 ```
 
-### Step 4 — verify that the fix works
+### Step 4: verify that the fix works
 
 This runs the same tests against the patched local copy. All five tests should pass.
 
