@@ -1,0 +1,33 @@
+[package]
+name = "repro-fixed"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+# Standalone: not part of any parent workspace.
+[workspace]
+
+# The same test file is compiled against upstream and against the fixed copy.
+[[test]]
+name = "hiding_rng_lock"
+path = "../tests/hiding_rng_lock.rs"
+
+# The same Plonky3 commit as upstream/Cargo.toml, with
+# patches/0001-hiding-rng-lock.patch applied. Created by ./setup-fixed.sh.
+[dev-dependencies]
+p3-baby-bear   = { path = "../vendor/plonky3-fixed/baby-bear" }
+p3-challenger  = { path = "../vendor/plonky3-fixed/challenger" }
+p3-commit      = { path = "../vendor/plonky3-fixed/commit" }
+p3-dft         = { path = "../vendor/plonky3-fixed/dft", features = ["parallel"] }
+p3-field       = { path = "../vendor/plonky3-fixed/field" }
+p3-fri         = { path = "../vendor/plonky3-fixed/fri", features = ["parallel"] }
+p3-matrix      = { path = "../vendor/plonky3-fixed/matrix", features = ["parallel"] }
+p3-maybe-rayon = { path = "../vendor/plonky3-fixed/maybe-rayon", features = ["parallel"] }
+p3-merkle-tree = { path = "../vendor/plonky3-fixed/merkle-tree", features = ["parallel"] }
+p3-symmetric   = { path = "../vendor/plonky3-fixed/symmetric" }
+rand  = { version = "0.10.1", features = ["std_rng"] }
+rayon = "1.12.0"
+
+# Debug builds are far too slow for these tests. Always run with --release.
+[profile.release]
+debug = 1

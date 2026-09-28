@@ -1,0 +1,32 @@
+[package]
+name = "repro-upstream"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+# Standalone: not part of any parent workspace.
+[workspace]
+
+# The same test file is compiled against upstream and against the fixed copy.
+[[test]]
+name = "hiding_rng_lock"
+path = "../tests/hiding_rng_lock.rs"
+
+# Plonky3 main, pinned to one commit.
+[dev-dependencies]
+p3-baby-bear   = { git = "https://github.com/Plonky3/Plonky3.git", rev = "299d81c2db5c2280b57e332e4606376852b23035" }
+p3-challenger  = { git = "https://github.com/Plonky3/Plonky3.git", rev = "299d81c2db5c2280b57e332e4606376852b23035" }
+p3-commit      = { git = "https://github.com/Plonky3/Plonky3.git", rev = "299d81c2db5c2280b57e332e4606376852b23035" }
+p3-dft         = { git = "https://github.com/Plonky3/Plonky3.git", rev = "299d81c2db5c2280b57e332e4606376852b23035", features = ["parallel"] }
+p3-field       = { git = "https://github.com/Plonky3/Plonky3.git", rev = "299d81c2db5c2280b57e332e4606376852b23035" }
+p3-fri         = { git = "https://github.com/Plonky3/Plonky3.git", rev = "299d81c2db5c2280b57e332e4606376852b23035", features = ["parallel"] }
+p3-matrix      = { git = "https://github.com/Plonky3/Plonky3.git", rev = "299d81c2db5c2280b57e332e4606376852b23035", features = ["parallel"] }
+p3-maybe-rayon = { git = "https://github.com/Plonky3/Plonky3.git", rev = "299d81c2db5c2280b57e332e4606376852b23035", features = ["parallel"] }
+p3-merkle-tree = { git = "https://github.com/Plonky3/Plonky3.git", rev = "299d81c2db5c2280b57e332e4606376852b23035", features = ["parallel"] }
+p3-symmetric   = { git = "https://github.com/Plonky3/Plonky3.git", rev = "299d81c2db5c2280b57e332e4606376852b23035" }
+rand  = { version = "0.10.1", features = ["std_rng"] }
+rayon = "1.12.0"
+
+# Debug builds are far too slow for these tests. Always run with --release.
+[profile.release]
+debug = 1

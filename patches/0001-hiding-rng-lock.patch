@@ -1,0 +1,85 @@
+diff --git a/fri/src/hiding_pcs.rs b/fri/src/hiding_pcs.rs
+index 92bd863..6408957 100644
+--- a/fri/src/hiding_pcs.rs
++++ b/fri/src/hiding_pcs.rs
+@@ -17,6 +17,7 @@ use p3_matrix::horizontally_truncated::HorizontallyTruncated;
+ use p3_matrix::row_index_mapped::RowIndexMappedView;
+ use p3_util::log2_strict_usize;
+ use rand::distr::{Distribution, StandardUniform};
++use rand::rngs::StdRng;
+ use rand::{CryptoRng, RngExt, SeedableRng};
+ use spin::Mutex;
+ use tracing::info_span;
+@@ -244,9 +245,12 @@ where
+                         // To generate it, we add `w + 2 * num_random_codewords` columns to the original matrix, then reshape it by setting the width to `w + num_random_codewords`.
+                         // All columns are added on the right hand side so, after reshaping, this has the net effect of adding `num_random_codewords` random columns on the right and interleaving the original trace with random rows.
+ 
++                        // `with_random_cols` runs a parallel copy. Do not hold the spin
++                        // lock across it: fork an owned RNG and release the lock first.
++                        let mut rng = StdRng::from_rng(&mut *self.rng.lock());
+                         let mut random_evaluation = mat.with_random_cols(
+                             mat_width + 2 * self.num_random_codewords,
+-                            &mut *self.rng.lock(),
++                            &mut rng,
+                         );
+                         random_evaluation.width = mat_width + self.num_random_codewords;
+ 
+@@ -493,10 +497,13 @@ where
+             .map(|i| cis[i] * last_chunk_ci_inv)
+             .collect_vec();
+ 
+-        let mut rng = self.rng.lock();
++        // The guard used to live until the end of this function, across the parallel
++        // work in `with_random_cols` and in the DFTs below. Fork an owned RNG and
++        // release the lock at once instead.
++        let mut rng = StdRng::from_rng(&mut *self.rng.lock());
+         let randomized_evaluations: Vec<RowMajorMatrix<Val>> = evaluations
+             .into_iter()
+-            .map(|mat| mat.with_random_cols(self.num_random_codewords, &mut *rng))
++            .map(|mat| mat.with_random_cols(self.num_random_codewords, &mut rng))
+             .collect();
+         // Add random values to the LDE evaluations as described in https://eprint.iacr.org/2024/1037.pdf.
+         // If we have `d` chunks, let q'_i(X) = q_i(X) + v_H_i(X) * t_i(X) where t(X) is random, for 1 <= i < d.
+@@ -1633,7 +1640,8 @@ mod tests {
+         domains: &[Domain],
+         mats: &[RowMajorMatrix<Val>],
+     ) -> Vec<RowMajorMatrix<Val>> {
+-        let mut rng = StdRng::seed_from_u64(QUOTIENT_RNG_SEED);
++        // `get_quotient_ldes` forks one owned RNG off the shared one, then draws from the fork.
++        let mut rng = StdRng::from_rng(&mut StdRng::seed_from_u64(QUOTIENT_RNG_SEED));
+ 
+         let cis = get_zp_cis(domains);
+         let last_chunk = domains.len() - 1;
+diff --git a/merkle-tree/src/hiding_mmcs.rs b/merkle-tree/src/hiding_mmcs.rs
+index 0f01bbb..2172aa9 100644
+--- a/merkle-tree/src/hiding_mmcs.rs
++++ b/merkle-tree/src/hiding_mmcs.rs
+@@ -134,14 +134,20 @@ where
+         &self,
+         inputs: Vec<M>,
+     ) -> (Self::Commitment, Self::ProverData<M>) {
+-        let mut rng = self.rng.lock();
+-        let salted_inputs = inputs
+-            .into_iter()
+-            .map(|mat| {
+-                let salts = RowMajorMatrix::rand(&mut *rng, mat.height(), SALT_ELEMS);
+-                HorizontalPair::new(mat, salts)
+-            })
+-            .collect();
++        // Draw all salts, then release the lock before the Merkle tree is built.
++        // The tree build runs in parallel. A rayon worker that holds this spin lock
++        // and waits for a sub-task can pick up another `commit` on the same instance.
++        // That task would spin forever on a lock its own thread holds.
++        let salted_inputs: Vec<_> = {
++            let mut rng = self.rng.lock();
++            inputs
++                .into_iter()
++                .map(|mat| {
++                    let salts = RowMajorMatrix::rand(&mut *rng, mat.height(), SALT_ELEMS);
++                    HorizontalPair::new(mat, salts)
++                })
++                .collect()
++        };
+         self.inner.commit(salted_inputs)
+     }
+ 
