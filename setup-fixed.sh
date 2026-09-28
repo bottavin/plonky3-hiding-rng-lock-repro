@@ -2,7 +2,7 @@
 # Creates vendor/plonky3-fixed: Plonky3 at the pinned commit, with the fix applied.
 set -euo pipefail
 
-REV=299d81c2db5c2280b57e332e4606376852b23035
+REV=11053cbe49dbb3f78ad57f1d80aa837592ce9276
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 DEST="$ROOT/vendor/plonky3-fixed"
 PATCH="$ROOT/patches/0001-hiding-rng-lock.patch"

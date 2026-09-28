@@ -9,7 +9,7 @@ The same test file is compiled twice:
 
 | Directory   | Plonky3 source                                                   |
 |-------------|------------------------------------------------------------------|
-| `upstream/` | git dependency, `main` pinned at `299d81c2db5c2280b57e332e4606376852b23035` |
+| `upstream/` | git dependency, `main` pinned at `11053cbe49dbb3f78ad57f1d80aa837592ce9276` |
 | `fixed/`    | the same commit with `patches/0001-hiding-rng-lock.patch` applied |
 
 ## The three call sites
@@ -183,7 +183,7 @@ Or unzip the archive and enter the directory.
 
 ### Step 2: reproduce the bugs on upstream Plonky3
 
-This downloads Plonky3 `main` from GitHub (pinned at `299d81c2`) and runs the tests.
+This downloads Plonky3 `main` from GitHub (pinned at `11053cbe`) and runs the tests.
 The three concurrent tests will deadlock and fail. The two roundtrip tests will pass.
 
 ```bash
