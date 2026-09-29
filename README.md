@@ -1,5 +1,8 @@
 # plonky3-hiding-rng-lock-repro
 
+This analysis is also published on HackMD:
+[A deadlock hidden in Plonky3's zero-knowledge mode](https://hackmd.io/@vba/plonky3-zero-knowledge-deadlock).
+
 Plonky3 `MerkleTreeHidingMmcs` and `HidingFriPcs` keep their RNG in a `spin::Mutex`.
 At three call sites the lock is held while rayon parallel work runs.
 When the same instance is used from several rayon tasks, the pool can deadlock.
